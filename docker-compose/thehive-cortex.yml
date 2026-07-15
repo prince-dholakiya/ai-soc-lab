@@ -1,0 +1,63 @@
+services:
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra
+    environment:
+      - MAX_HEAP_SIZE=1G
+      - HEAP_NEWSIZE=256M
+      - CASSANDRA_CLUSTER_NAME=thp
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    restart: unless-stopped
+
+  elasticsearch_cortex:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.9
+    container_name: es_cortex
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    volumes:
+      - es_cortex_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  cortex:
+    image: thehiveproject/cortex:3.1.7
+    container_name: cortex
+    depends_on:
+      - elasticsearch_cortex
+    ports:
+      - "9001:9001"
+    environment:
+      - JVM_OPTS=-Xms512M -Xmx512M
+    command: --es-hostname elasticsearch_cortex --job-directory /tmp/cortex-jobs
+    volumes:
+      - cortex_jobs:/tmp/cortex-jobs
+    restart: unless-stopped
+
+  thehive:
+    image: strangebee/thehive:5.2
+    container_name: thehive
+    depends_on:
+      - cassandra
+    ports:
+      - "9000:9000"
+    environment:
+      - JVM_OPTS=-Xms512M -Xmx512M
+    command: >
+      --cql-hostnames cassandra
+      --index-backend elasticsearch
+      --es-hostnames elasticsearch_cortex
+      --cortex-hostnames cortex
+      --cortex-port 9001
+    volumes:
+      - thehive_data:/opt/thp/thehive/data
+      - thehive_index:/opt/thp/thehive/index
+    restart: unless-stopped
+
+volumes:
+  cassandra_data:
+  es_cortex_data:
+  cortex_jobs:
+  thehive_data:
+  thehive_index:
